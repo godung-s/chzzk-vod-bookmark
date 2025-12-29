@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Chzzk VOD Bookmark System
+// @name         Chzzk VOD Bookmark System V1.1
 // @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  치지직 VOD 북마크, 썸네일 크롤링, 날짜/조회수 표시, 스마트 UI
-// @author       godung-s
+// @version      1.1
+// @description  html 클래스(theme_dark) 감지 로직 적용, 테마 변경 시 UI 강제 리렌더링, 디자인 가이드 100% 준수
+// @author       SeoYuri
 // @match        https://chzzk.naver.com/*
 // @icon         https://ssl.pstatic.net/static/nng/glive/icon/favicon.png
 // @grant        GM_addStyle
@@ -34,17 +34,18 @@
     // =========================================================================
     // 2. 스타일 (CSS)
     // =========================================================================
-    const css = `
+   const css = `
+        /* [1] 즐겨찾기 버튼 (기본: 다크모드) */
         .cz-bookmark-btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             width: 36px;
             height: 36px;
-            border-radius: 8px;
+            border-radius: 50%; /* 항상 원형 */
             margin-right: 8px;
-            background-color: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background-color: #2E3033; /* [수정됨] 요청하신 다크모드 배경색 */
+            border: none; /* 테두리 없음 */
             cursor: pointer;
             transition: all 0.2s ease;
         }
@@ -52,6 +53,19 @@
         .cz-bookmark-btn.active svg { fill: ${CONFIG.activeColor}; stroke: ${CONFIG.activeColor}; }
         .cz-bookmark-btn.inactive svg { fill: none; stroke: ${CONFIG.inactiveColor}; }
 
+        /* [라이트 모드] 즐겨찾기 버튼 */
+        body.cz-light-mode .cz-bookmark-btn {
+            background-color: #E1E1E5 !important;
+        }
+        body.cz-light-mode .cz-bookmark-btn:hover {
+            background-color: #d0d0d5 !important;
+        }
+        body.cz-light-mode .cz-bookmark-btn.inactive svg {
+            stroke: #2E3033 !important; /* 진한 회색 */
+        }
+
+
+        /* [2] 플로팅 버튼 (FAB) */
         .cz-fab-wrapper {
             position: fixed;
             z-index: 10000;
@@ -68,7 +82,7 @@
             width: ${CONFIG.fabSize};
             height: ${CONFIG.fabSize};
             border-radius: 50%;
-            background-color: #141517;
+            background-color: #141517; /* 기본 다크 */
             border: 2px solid ${CONFIG.activeColor};
             color: ${CONFIG.activeColor};
             display: flex;
@@ -76,13 +90,22 @@
             justify-content: center;
             cursor: grab;
             box-shadow: 0 4px 15px rgba(0,0,0,0.6);
-            transition: transform 0.1s;
+            transition: background-color 0.2s, transform 0.1s;
             position: relative;
             z-index: 11;
         }
+
+        /* [라이트 모드] 플로팅 버튼 배경 흰색 강제 */
+        body.cz-light-mode .cz-fab-btn {
+            background-color: #ffffff !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15) !important;
+        }
+
         .cz-fab-btn:active { cursor: grabbing; transform: scale(0.95); }
         .cz-fab-btn svg { width: 26px; height: 26px; fill: ${CONFIG.activeColor} !important; stroke: ${CONFIG.activeColor} !important; }
 
+
+        /* [3] 리스트 패널 */
         .cz-list-panel {
             position: absolute;
             width: ${CONFIG.listWidth};
@@ -96,13 +119,9 @@
             box-shadow: 0 8px 30px rgba(0,0,0,0.8);
             cursor: default;
             z-index: 10;
+            color: #eee;
         }
         .cz-list-panel.show { display: flex; }
-
-        .cz-pos-top-left { bottom: 60px; right: 0; }
-        .cz-pos-bottom-left { top: 60px; right: 0; }
-        .cz-pos-top-right { bottom: 60px; left: 0; }
-        .cz-pos-bottom-right { top: 60px; left: 0; }
 
         .cz-list-header {
             flex-shrink: 0;
@@ -116,15 +135,6 @@
             justify-content: space-between;
         }
 
-        #cz-list-content {
-            flex: 1;
-            overflow-y: auto;
-            overscroll-behavior: contain;
-        }
-        #cz-list-content::-webkit-scrollbar { width: 8px; }
-        #cz-list-content::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
-        #cz-list-content::-webkit-scrollbar-track { background: #191b1e; }
-
         .cz-list-item {
             display: flex;
             padding: 12px;
@@ -137,26 +147,73 @@
         }
         .cz-list-item:hover { background-color: #232529; }
 
-        .cz-thumb-box {
-            width: 140px;
-            height: 78px;
-            flex-shrink: 0;
-            margin-right: 14px;
-            border-radius: 6px;
-            overflow: hidden;
-            background-color: #000;
-            display: flex; align-items: center; justify-content: center;
-        }
-        .cz-thumb-img { width: 100%; height: 100%; object-fit: cover; }
-
-        .cz-info-box { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
         .cz-video-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #fff; }
         .cz-video-meta { font-size: 11px; color: #999; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        .cz-delete-btn { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; background: rgba(0,0,0,0.6); color: #ff5555; border-radius: 4px; display: none; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; z-index: 10; }
+        /* [라이트 모드] 리스트 패널 */
+        body.cz-light-mode .cz-list-panel {
+            background-color: #ffffff !important;
+            border: 1px solid #E1E1E5 !important;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15) !important;
+            color: #222 !important;
+        }
+        body.cz-light-mode .cz-list-header {
+            background: #f8f9fa !important;
+            color: #222 !important;
+            border-bottom: 1px solid #e0e0e0 !important;
+        }
+        body.cz-light-mode .cz-list-item {
+            border-bottom: 1px solid #f0f0f0 !important;
+            color: #222 !important;
+        }
+        body.cz-light-mode .cz-list-item:hover {
+            background-color: #f5f6f8 !important;
+        }
+        body.cz-light-mode .cz-video-title { color: #1E1E23 !important; }
+        body.cz-light-mode .cz-video-meta { color: #767678 !important; }
+
+        /* 스크롤바 */
+        #cz-list-content { flex: 1; overflow-y: auto; overscroll-behavior: contain; }
+        #cz-list-content::-webkit-scrollbar { width: 8px; }
+        #cz-list-content::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        #cz-list-content::-webkit-scrollbar-track { background: #191b1e; }
+
+        body.cz-light-mode #cz-list-content::-webkit-scrollbar-thumb { background: #ccc !important; }
+        body.cz-light-mode #cz-list-content::-webkit-scrollbar-track { background: #f9f9f9 !important; }
+
+        /* 기타 공통 */
+        .cz-thumb-box { width: 140px; height: 78px; flex-shrink: 0; margin-right: 14px; border-radius: 6px; overflow: hidden; background-color: #000; display: flex; align-items: center; justify-content: center; }
+        .cz-thumb-img { width: 100%; height: 100%; object-fit: cover; }
+        .cz-info-box { flex: 1; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+
+        /* [기본: 다크모드] 삭제 버튼 */
+        .cz-delete-btn {
+            position: absolute; top: 6px; right: 6px;
+            width: 20px; height: 20px;
+            background: rgba(0,0,0,0.6); /* 다크모드용 반투명 검정 */
+            color: #ff5555;
+            border-radius: 4px;
+            display: none;
+            align-items: center; justify-content: center;
+            font-size: 14px; cursor: pointer; z-index: 10;
+        }
+
+        /* [라이트 모드] 삭제 버튼 오버라이드 */
+        body.cz-light-mode .cz-delete-btn {
+            background: #E1E1E5 !important; /* 라이트모드용 밝은 회색 */
+        }
+
         .cz-list-item:hover .cz-delete-btn { display: flex; }
-        .cz-delete-btn:hover { background: #ff5555; color: white; }
+
+        /* 호버 시 빨간색 반전 (공통) */
+        .cz-delete-btn:hover { background: #ff5555 !important; color: white !important; }
+
         .cz-empty-msg { padding: 30px; text-align: center; color: #777; font-size: 13px; }
+
+        .cz-pos-top-left { bottom: 60px; right: 0; }
+        .cz-pos-bottom-left { top: 60px; right: 0; }
+        .cz-pos-top-right { bottom: 60px; left: 0; }
+        .cz-pos-bottom-right { top: 60px; left: 0; }
 
         iframe[id^="cz-crawler-"] { position: fixed; top: -9999px; left: -9999px; width: 1024px; height: 768px; visibility: hidden; pointer-events: none; z-index: -1; }
     `;
@@ -175,23 +232,14 @@
         const now = new Date();
         const num = parseInt(text.replace(/[^0-9]/g, '')) || 0;
 
-        if (text.includes('분 전') || text.includes('방금')) {
-            // 오늘
-        } else if (text.includes('시간 전')) {
-            now.setHours(now.getHours() - num);
-        } else if (text.includes('일 전')) {
-            now.setDate(now.getDate() - num);
-        } else if (text.includes('어제')) {
-            now.setDate(now.getDate() - 1);
-        } else if (text.includes('주 전')) {
-            now.setDate(now.getDate() - (num * 7));
-        } else if (text.includes('달 전') || text.includes('개월 전')) {
-            now.setMonth(now.getMonth() - num);
-        } else if (text.includes('년 전')) {
-            now.setFullYear(now.getFullYear() - num);
-        } else {
-            return text;
-        }
+        if (text.includes('분 전') || text.includes('방금')) { /* 오늘 */ }
+        else if (text.includes('시간 전')) now.setHours(now.getHours() - num);
+        else if (text.includes('일 전')) now.setDate(now.getDate() - num);
+        else if (text.includes('어제')) now.setDate(now.getDate() - 1);
+        else if (text.includes('주 전')) now.setDate(now.getDate() - (num * 7));
+        else if (text.includes('달 전') || text.includes('개월 전')) now.setMonth(now.getMonth() - num);
+        else if (text.includes('년 전')) now.setFullYear(now.getFullYear() - num);
+        else return text;
 
         return `${now.getFullYear()}. ${now.getMonth() + 1}. ${now.getDate()}`;
     }
@@ -538,8 +586,50 @@
         }
     };
 
+    // =========================================================================
+    // 8. 실행 (테마 감지 로직 개선)
+    // =========================================================================
     function init() {
         UI.createFAB();
+
+        // [테마 감지 로직 - class 기반]
+        const checkTheme = () => {
+            const html = document.documentElement;
+            // <html> 태그의 class에 'theme_dark'가 있으면 다크모드, 없으면 라이트모드
+            const isDarkMode = html.classList.contains('theme_dark');
+
+            if (isDarkMode) {
+                document.body.classList.add('cz-dark-mode');
+                document.body.classList.remove('cz-light-mode');
+            } else {
+                document.body.classList.add('cz-light-mode');
+                document.body.classList.remove('cz-dark-mode');
+            }
+
+            // 모든 UI 요소 삭제 후 재생성 (강제 리렌더링)
+            const oldFab = document.querySelector('.cz-fab-wrapper');
+            if (oldFab) oldFab.remove();
+            UI.createFAB();
+
+            const oldBtn = document.querySelector('.cz-bookmark-btn');
+            if (oldBtn) oldBtn.remove();
+
+            if (window.location.pathname.startsWith('/video/')) {
+                UI.injectBookmarkButton();
+            }
+        };
+
+        // MutationObserver: class 속성 변화 감지
+        const themeObserver = new MutationObserver(checkTheme);
+        themeObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+
+        // 초기 실행
+        checkTheme();
+
+        // 페이지 이동 감지
         let lastPath = window.location.pathname;
         const observer = new MutationObserver(() => {
             const currentPath = window.location.pathname;
@@ -551,6 +641,7 @@
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
+
         if (window.location.pathname.startsWith('/video/')) {
             setTimeout(UI.injectBookmarkButton, 1000);
             setTimeout(UI.injectBookmarkButton, 3000);
