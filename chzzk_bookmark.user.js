@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.1
 // @description  html 클래스(theme_dark) 감지 로직 적용, 테마 변경 시 UI 강제 리렌더링, 디자인 가이드 100% 준수
-// @author       SeoYuri
+// @author       godung-s
 // @match        https://chzzk.naver.com/*
 // @icon         https://ssl.pstatic.net/static/nng/glive/icon/favicon.png
 // @grant        GM_addStyle
