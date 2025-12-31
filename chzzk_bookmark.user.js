@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.2
 // @description  가짜 썸네일(ogtag) 차단 및 로딩 UI 유지, VOD 정보 지속적 DOM 파싱, 데이터 무결성 강화
-// @author       SeoYuri
+// @author       godung-s
 // @match        https://chzzk.naver.com/*
 // @icon         https://ssl.pstatic.net/static/nng/glive/icon/favicon.png
 // @grant        GM_addStyle
